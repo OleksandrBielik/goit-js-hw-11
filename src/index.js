@@ -1,25 +1,21 @@
 import {Notify} from 'notiflix';
 import 'notiflix/dist/notiflix-3.2.5.min.css';
-import axios from "axios";
 import SimpleLightbox from "simplelightbox";
 import "simplelightbox/dist/simple-lightbox.min.css";
+import {fetchPixabay} from './js/pixabay-service';
 
-const BASE_URL = 'https://pixabay.com/api/';
-const key = '28030161-9108d6deb48277e8b90eb1d15';
-let page = 1;
-let per_page = 40;
-let parameters = `image_type=photo&orientation=horizontal&safesearch=true&per_page=${per_page}&page=${page}`
-let q = '';
-let currentList = [];
-var lightbox = null;
+
 
 const form = document.querySelector('form');
 const gallery = document.querySelector('.gallery');
-
 const loadMore = document.querySelector('.load-more');
 const searchInput = document.getElementsByName('searchQuery')[0];
 
-
+let page = 1;
+let per_page = 40;
+let q = '';
+let currentList = 0;
+var lightbox = null;
 
 
 
@@ -31,46 +27,63 @@ function filterResponse({hits}) {
     )
 }
 
-function checkResponse({data}) {
+function checkResponse({ data }) {
     if (data.hits.length === 0) {
         Notify.failure("Sorry, there are no images matching your search query. Please try again.")
+        hideButton()
         return
-    } else if (data.hits.length < per_page) {
+    } else if (data.totalHits-currentList <= per_page) {
         Notify.info("We're sorry, but you've reached the end of search results.")
+        hideButton()
+        return data
+    } else if (currentList > 0) {
+        removeDisabled()
+        showButton()
         return data
     }
     Notify.success(`Hooray! We found ${data.totalHits} images.`)
-    console.log(data)
+    showButton()
     return data
 }
 
-form.addEventListener('submit', (e) => {
-    e.preventDefault();
+async function transformResponse(page,q) {
 
-    if (e.currentTarget.elements.searchQuery.value !== q) {
-        page = 1;
-        clearGallery();
-        q = e.currentTarget.elements.searchQuery.value;
+    const data = await fetchPixabay(page, q)
+    const checkedData = await checkResponse(data);
+    const filteredData = await filterResponse(checkedData);
+    const cardList = await getCards(filteredData);
+    return cardList
 
-        axios.get(`${BASE_URL}?key=${key}&q=${q}&${parameters}`)
-            .then(checkResponse)
-            .then(filterResponse)
-            .then(getCards)
-            .then(setCards)
-            .then(response => initLightBox())
-            .catch(console.log)
+}
+
+async function setGallery() {
+    try {
+        const cardList = await transformResponse(page,q)
+        setCards(cardList);
+        initLightBox()
+
+    } catch (error) {
+        console.log(error)
     }
 
+}
 
+async function addGallery() {
+    try {
+        const cardList = await transformResponse(page+=1,q)
+        addCards(cardList);
+        lightbox.refresh();
+        initScroll();
 
-    
+    } catch (error) {
+        console.log(error)
+    }
 
-
-})
+}
 
 function getCards(arr) {
 
-    currentList = currentList.concat(arr)
+    currentList += arr.length
 
     const cards = arr.map(({ webformatURL, largeImageURL, tags, likes, views, comments, downloads }) => `
         <a href="${largeImageURL}">
@@ -113,10 +126,28 @@ function setCards(data) {
 
 function addCards(data) {
     gallery.insertAdjacentHTML('beforeend', data.join(''));
-    lightbox.refresh();
 }
 
+function showButton() {
+    loadMore.style.display = 'block';
+}
 
+function hideButton() {
+    loadMore.style.display = 'none';
+}
+
+function setDisabled() {
+    loadMore.setAttribute('disabled','disabled')
+}
+
+function removeDisabled() {
+    loadMore.removeAttribute('disabled');
+}
+
+function initScroll() {
+    const { height: cardHeight } = document.querySelector(".gallery").firstElementChild.getBoundingClientRect();
+    window.scrollBy({top: cardHeight * 2, behavior: "smooth"})
+}
 
 function initLightBox() {
     lightbox = new SimpleLightbox('.gallery a');
@@ -125,15 +156,31 @@ function initLightBox() {
     });
 }
 
-loadMore.addEventListener('click', () => {
-    if (q === searchInput.value) {
-        console.log(page)
 
-        axios.get(`${BASE_URL}?key=${key}&q=${q}&image_type=photo&orientation=horizontal&safesearch=true&per_page=40&page=${page+=1}`)
-            .then(checkResponse)
-            .then(filterResponse)
-            .then(getCards)
-            .then(addCards)
-            .catch(console.log)
+searchInput.addEventListener('input', (e) => {
+    if (e.target.value.trim() === "") {
+        e.target.value = ""
     }
+
+})
+
+form.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    if (e.currentTarget.elements.searchQuery.value.trim() !== q) {
+        page = 1;
+        currentList = 0;
+        removeDisabled()
+        hideButton()
+        clearGallery();
+        q = e.currentTarget.elements.searchQuery.value.trim();
+        setGallery()        
+    }
+
+})
+
+loadMore.addEventListener('click', () => {
+    setDisabled()
+    hideButton()
+    addGallery()
 })

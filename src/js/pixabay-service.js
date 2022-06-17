@@ -1,10 +1,16 @@
+import axios from "axios";
+
 const BASE_URL = 'https://pixabay.com/api/';
 const key = '28030161-9108d6deb48277e8b90eb1d15';
-const parameters = 'image_type=photo&orientation=horizontal&safesearch=true'
-const image_type = 'photo';
-const orientation = 'horizontal';
-const safesearch = true;
-let q = '';
+
+let parameters = `image_type=photo&orientation=horizontal&safesearch=true&per_page=40`
 
 
-fetch(`https://pixabay.com/api/?key=28030161-9108d6deb48277e8b90eb1d15&${parameters}`).then(response=>response.json()).then(console.log)
+
+export async function fetchPixabay(page, q) {
+
+    const data = await axios.get(`${BASE_URL}?key=${key}&q=${q}&${parameters}&page=${page}`);
+    return data
+
+}
+
